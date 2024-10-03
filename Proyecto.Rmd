@@ -1,0 +1,869 @@
+---
+title: "Proyecto"
+output: html_document
+author: "Priscila Mikal Sánchez Martínez"
+date: "2024-03-16"
+---
+
+```{r, include=FALSE, warning=FALSE}
+
+#install.packages("datarium")
+library(datarium)
+
+#install.packages("corrplot")
+library(corrplot)
+
+#install.packages("kableExtra")
+library(kableExtra)
+
+library(ggplot2)
+
+data(marketing)
+
+```
+
+## Introducción
+
+Datarium es un banco de datos para análisis y visualización estadística. Uno de los datos que contiene es _marketing_, ideado para hacer modelos de regresión, contiene el impacto en ventas de tres medios contratados para anuncios (Youtube, Facebook y el periódico). Las variables son  i) el presupuesto (en miles de dólares) que se da para cada medio y ii) las ventas (en miles de unidades). Son datos simulados de un experimento de anuncios que se ha repetido 200 veces.
+
+
+El creador de este banco de datos es [Alboukadel Kassambara](https://www.alboukadel.com/), quien tiene varios paquetes para el análisis de datos multivariado ([factoextra](https://rpkgs.datanovia.com/factoextra/index.html)), el análisis de supervivencia ([survminer](https://rpkgs.datanovia.com/survminer/index.html)) y de visualización de datos ([ggpubr](https://rpkgs.datanovia.com/ggpubr/index.html)). Actualmente se desempeña como científico bioinformático en HalioDx, Francia.
+
+
+
+## Análisis exploratorio de datos
+
+```{r, include=FALSE}
+#El número de variables es
+ncol(marketing)
+#y el número de observaciones es 
+nrow(marketing)
+
+```
+
+El número de variables es 4, y el número de observaciones son 200.
+
+```{r, echo=FALSE}
+
+head(marketing, 5) |> kable(align = "c")
+```
+
+Al imprimir las primeraas 5 observaciones de los datos es posible notar que todas las variables son cuantitativas y continuas. 
+
+Si obtenemos los gráficos de disperción entre todas las combinaciones de nuestro _data frame_ se puede percibir que Youtube, ventas y Facebook, ventas tienen _scatter plots_ con dirección positiva y lineales, en el caso de Youtube los puntos dibujan una línea delineada y con menos anomalías que en el caso de Facebook.
+
+
+```{r, echo=FALSE}
+pairs(marketing)
+```
+
+Cuando volteamos a ver la matriz de correlaciones Youtube, ventas tienen la correlación más alta con 0.78, seguido por Facebook, ventas con 0.58 y el conjunto que tiene la menor correlación es Periódico, ventas con 0.23. 
+
+```{r, echo=FALSE}
+
+cor(marketing) |> kable(align = "c")
+corrplot(cor(marketing))
+
+```
+
+
+## Sales
+
+Al aplicar summary a _sales_ tenemos que:
+
+```{r, echo=FALSE, warning=FALSE}
+
+su <- summary(marketing$sales) |> unclass() |> data.frame()
+
+kable(su, col.names = c(" ", " "))
+
+
+```
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+ggplot(data = marketing) +
+  aes(x = sales) +
+  geom_boxplot() +
+  geom_dotplot(stackdir = "center", dotsize = 0.6, fill = "#B558AE") + 
+  scale_y_continuous(breaks = NULL) +
+  theme_bw()
+
+```
+
+
+```{r, include=FALSE, warning=FALSE}
+
+#La desviación estándar de sales es
+sd(marketing$sales)
+
+```
+
+La desviación estándar de _sales_ es 6.260948
+
+La gráfica de la densidad de _sales_ luce así
+
+```{r, echo=FALSE, warning=FALSE}
+
+ggplot(data = marketing) +
+  aes(x = sales) +
+  geom_density(color = "#2479BF") +
+  labs(title = "Densidad empírica de 'sales'") + 
+  theme_bw()
+
+```
+
+
+Y aplicando el método de los valores atípicos mediante el rango intercuartílico obtenemos que no hay anomalías. 
+
+```{r, echo=FALSE, warning=FALSE}
+atipicos <- boxplot.stats(marketing$sales)$out
+
+```
+
+
+
+# Análisis de regresión simple
+
+## Sales vs. Youtube
+
+Dado que en la gráfica de disperción entre Youtube y Sales tienen una dirección positiva con tendencia lineal y una correlación de 0.78. 
+```{r, echo=FALSE, warning=FALSE}
+
+ggplot(data = marketing) +
+  aes(x = youtube, y = sales) +
+  geom_point() +
+  ggtitle("Gráfica de disperción") +
+  theme_bw()
+
+```
+
+
+
+Deseamos ajustar un modelo lineal simple entre estas variables tal que 
+$sales_{i} = \beta_{0} + \beta_{1} youtube_{i} + \epsilon_{i}$
+
+
+Usando mínimos cuadrados daremos con los resultados para $\hat{Y_{i}}$ y $\hat{\epsilon_{i}}$
+
+```{r, echo=FALSE, warning=FALSE}
+
+barX <- mean(marketing$youtube)
+barY <- mean(marketing$sales)
+
+hatbeta1 <- (sum((marketing$youtube - barX)*(marketing$sales - barY))) / sum((marketing$youtube - barX)^2)
+
+hatbeta0 <- barY - hatbeta1 * barX
+
+hatY <- hatbeta0 + hatbeta1 * marketing$youtube
+
+e <- marketing$sales - hatY
+
+marketing$hatY <- hatY
+marketing$e <- e
+
+head(marketing, 5) |> kable(align = "c")
+
+```
+
+Cuyos parámetros están dados por $\hat{\beta_{0}} = 8.439112$ y $\hat{\beta_{1}} = 0.04753664$
+
+
+
+### Inferencia $\hat{\beta_{1}}$
+
+
+```{r, include=FALSE}
+
+hatsigma2 <- sum((marketing$sales - hatY)^2) / (nrow(marketing)-2)
+
+hatsigma <- sqrt(hatsigma2)
+
+varbeta1 <- hatsigma2 / (sum((marketing$youtube - barX)^2))
+
+t95 <- qt(p = 0.975, nrow(marketing)-2)
+
+ls <- hatbeta1 + (t95 * sqrt(varbeta1))
+li <- hatbeta1 - t95 * sqrt(varbeta1)
+
+```
+
+Aplicando las fórmulas tendremos que 
+
++ $\hat{\sigma}^2 = \frac{\sum_{i = 1}^n (Y_i - \hat{Y_i})^2}{n - 2} = 15.29113$.
+
++ $\sigma^2\{\beta_1\} = \frac{\hat{\sigma}^2}{\sum_{i = 1}^n (X_i - \bar{X_i})^2} = 7.239367e^-06$ y por lo tanto $\sigma\{\beta_1\} = 0.002690607$.
+
++ Con un intervalo del 95% de confianza de (0.04223072, 0.05284256) dado por $\hat{\beta_1} \pm t(0.95, 198) \sigma\{\beta_1\}$
+
+
+
+
+### Inferencia $\hat{\beta_0}$
+
+
+```{r, include=FALSE}
+
+varbeta0 <- sqrt(hatsigma2 * (1/nrow(marketing) + (barX^2) / sum((marketing$youtube - barX)^2)))
+
+li <- hatbeta0 - t95 * varbeta0
+ls <- hatbeta0 + t95 * varbeta0
+
+
+```
+
+
+
++ Con desviación estándar $\sigma \{\beta_0\} = \hat{\sigma}\sqrt{\frac{1}{n} + \frac{\bar{X}^2}{\sum_{i = 1}^n (X_i - \bar{X_i})^2}} = 0.5494115$
+
++ Y con un intervalo de confianza al 95% de (7.355663, 9.522561) dado por $\hat{\beta_0} \pm t(0.95, 198) \sigma\{\beta_0\}$
+
+
+
+Después de hacer la regresión la gráfica se ve así
+
+```{r, echo=FALSE, warning=FALSE}
+
+ggplot(data = marketing) +
+  aes(x = youtube, y = sales) +
+  geom_point() +
+  geom_hline(yintercept = hatbeta0, linetype = 'dashed', colour = "#BF2430") +
+  geom_vline(xintercept = 0) +
+  geom_smooth(formula = y ~ x, method = 'lm', se = FALSE, color = "#0B37A2") +
+  geom_segment(mapping = aes(x = 0, xend = 0, y = li, yend = ls), color = "#BF2430") +
+  geom_point(mapping = aes(x = 0, y = li), colour = "#BF2430", shape = 3)+
+  geom_point(mapping = aes(x = 0, y = ls), colour = "#BF2430", shape = 3) +
+  labs(title = "Regresión de Youtube y Sales") +
+  theme_bw()
+
+```
+
+
+
+
+### Inferencia $\hat{Y_h}$
+
+Se quiere estimar $\hat{Y_h}$ dado que $X_h = 250$
+
+```{r, include=FALSE}
+
+hatY250 <- hatbeta0 + hatbeta1 * 250
+
+sdhatY250 <- sqrt(hatsigma2 * (1/nrow(marketing) + ((250 - barX)^2) / sum((marketing$youtube - barX)^2)))
+
+li250 <- hatY250 - t95 * sdhatY250
+ls250 <- hatY250 + t95 * sdhatY250
+
+```
+
++ $\hat{Y_h} = \beta_{0} + \beta_{1} * X_h = 20.32327$
+
++ $\hat{\sigma}\{\hat{Y}_h\} = \hat{\sigma}\sqrt{\frac{1}{n} + \frac{(X_h - \bar{X})^2}{\sum_{i = 1}^n (X_i - \bar{X_i})^2}} = 0.3400245$
+
++ Con in intervalo de confianza del 95% de (19.65274, 20.99381) estimado por $\hat{Y_h} \pm t(0.95, 198)\hat{\sigma}\sqrt{\frac{1}{n} + \frac{(X_h - \bar{X})^2}{\sum_{i = 1}^n (X_i - \bar{X_i})^2}}$
+
+La gráfica de la regresión para este caso se ve así
+
+```{r, echo=FALSE, warning=FALSE}
+
+ggplot(data = marketing) +
+  aes(x = youtube, y = sales) +
+  geom_point() +
+  geom_vline(xintercept = 0) +
+  geom_hline(yintercept = hatY250, linetype = 'dashed', colour = "#BF2430") +
+  geom_vline(xintercept = 250) +
+  geom_smooth(formula = y ~ x, method = 'lm', se = FALSE, color = "#0B37A2") +
+  geom_segment(mapping = aes(x = 250, xend = 250, y = li250, yend = ls250), color = "#BF2430") +
+  geom_point(mapping = aes(x = 250, y = li250), colour = "#BF2430", shape = 3)+
+  geom_point(mapping = aes(x = 250, y = ls250), colour = "#BF2430", shape = 3) +
+  labs(title = "Regresión de Youtube y Sales") +
+  theme_bw()
+
+```
+
+
+Para el caso $X_h = 400$
+
+```{r, include=FALSE}
+
+hatY400 <- hatbeta0 + hatbeta1 * 400
+
+sdhatY400 <- sqrt(hatsigma2 * (1/nrow(marketing) + ((400 - barX)^2) / sum((marketing$youtube - barX)^2)))
+
+li400 <- hatY400 - t95 * sdhatY400
+ls400 <- hatY400 + t95 * sdhatY400
+```
+
+
++ $\hat{Y_h} = \hat{\beta_{0}} + \hat{\beta_{1}}  X_h = 27.45377$
+
++ $\hat{\sigma}\{\hat{Y}_h\} = \hat{\sigma}\sqrt{\frac{1}{n} + \frac{(X_h - \bar{X})^2}{\sum_{i = 1}^n (X_i - \bar{X_i})^2}} = 0.6619946$
+
++ Con un intervalo de confianza del 95% de (26.1483, 28.75923) estimado por $\hat{Y_h} \pm t(0.95, 198)\hat{\sigma}\sqrt{\frac{1}{n} + \frac{(X_h - \bar{X})^2}{\sum_{i = 1}^n (X_i - \bar{X_i})^2}}$
+
+La gráfica de la regresión para este caso se ve así
+
+```{r, echo=FALSE, warning=FALSE}
+
+ggplot(data = marketing) +
+  aes(x = youtube, y = sales) +
+  geom_point() +
+  geom_vline(xintercept = 0) +
+  geom_hline(yintercept = hatY400, linetype = 'dashed', colour = "#BF2430") +
+  geom_vline(xintercept = 400) +
+  geom_smooth(formula = y ~ x, method = 'lm', se = FALSE, color = "#0B37A2") +
+  geom_segment(mapping = aes(x = 400, xend = 400, y = li400, yend = ls400), color = "#BF2430") +
+  geom_point(mapping = aes(x = 400, y = li400), colour = "#BF2430", shape = 3)+
+  geom_point(mapping = aes(x = 400, y = ls400), colour = "#BF2430", shape = 3) +
+  geom_segment(mapping = aes(x = max(marketing$youtube), xend = 400, y = hatbeta0 + hatbeta1 * max(marketing$youtube), yend = hatbeta0 + hatbeta1 * 400), color = "#0B37A2", linetype = 'dashed') +
+  labs(title = "Regresión de Youtube y Sales") +
+  theme_bw()
+
+```
+
+
+Si hacemos predicciones sobre los mismos valores 
+
+Primero sobre $X_{h}^* = 250$
+
+```{r, include=FALSE}
+
+xh <- 250
+
+li <- hatY250 - (t95* hatsigma * sqrt(1 + 1/nrow(marketing) + ((xh - barX)^2)/sum((marketing$youtube - barX)^2)))
+
+ls <- hatY250 + (t95* hatsigma * sqrt(1 + 1/nrow(marketing) + ((xh - barX)^2)/sum((marketing$youtube - barX)^2)))
+
+```
+
+
++ $\hat{Y_h}^* = \hat{\beta_{0}} + \hat{\beta_{1}}  X_{h}^* = 20.32327$
+
++ $\hat{\sigma}\{\hat{Y}_h\} = \hat{\sigma}\sqrt{1 + \frac{1}{n} + \frac{(X_h - \bar{X})^2}{\sum_{i = 1}^n (X_i - \bar{X_i})^2}} = 3.925143$
+
++ Con un intervalo de confianza del 95% de (12.58282, 28.06372) estimado por $\hat{Y_h} \pm t(0.95, 198)\hat{\sigma}\sqrt{\frac{1}{n} + \frac{(X_h - \bar{X})^2}{\sum_{i = 1}^n (X_i - \bar{X_i})^2}}$
+
+Es posible notar que el intervalo de confianza de los _fitted values_ en el caso de $X_{h}^* = 250$ es menor que el intervalo cuando hacemos predicción.
+
+
+
+```{r, include=FALSE}
+
+xh <- 400
+
+li <- hatY400 - (t95* hatsigma * sqrt(1 + 1/nrow(marketing) + ((xh - barX)^2)/sum((marketing$youtube - barX)^2)))
+
+ls <- hatY400 + (t95* hatsigma * sqrt(1 + 1/nrow(marketing) + ((xh - barX)^2)/sum((marketing$youtube - barX)^2)))
+
+```
+
+
++ $\hat{Y_h}^* = \hat{\beta_{0}} + \hat{\beta_{1}}  X_{h}^* = 27.45377$
+
++ $\hat{\sigma}\{\hat{Y}_h\} = \hat{\sigma}\sqrt{1 + \frac{1}{n} + \frac{(X_h - \bar{X})^2}{\sum_{i = 1}^n (X_i - \bar{X_i})^2}} = 1.014229$
+
++ Con un intervalo de confianza del 95% de (19.63269, 35.27484) estimado por $\hat{Y_h} \pm t(0.95, 198)\hat{\sigma}\sqrt{\frac{1}{n} + \frac{(X_h - \bar{X})^2}{\sum_{i = 1}^n (X_i - \bar{X_i})^2}}$
+
+Nuevamente es posible notar que el intervalo de confianza de los _fitted values_ en el caso de $X_{h}^* = 400$ es menor que el intervalo cuando hacemos predicción.
+
+
+### ANOVA
+
+Si realizamos un análisis de varianza obtendremos 
+
+```{r, echo=FALSE}
+
+anova(lm(sales ~ youtube, data = marketing)) |> kable(align = "c")
+
+```
+
+De esta forma ahora sabemos el valor de 
+
++ $SSR = \sum_{i=1}^{n} (\hat{Y_i} - \bar{Y})^2 = 4773.1$ con 1 grado de libertad nos habla de qué tanto se distancia nuestro modelo del promedio observado.
+
++ $SSE = \sum_{i=1}^{n} (Y_{i} - \hat{Y_i})^2 = 3027.6$ con 198 grados de libertad y se puede interpretar como el error que hay entre los valores observados y nuestro modelo, en este caso la diferencia entre cada venta individual y lo que nuestra función estimada nos dice que fue.
+
++ Y finalmente $SST = \sum_{i=1}^{n} (Y_{i} - \bar{Y_i})^2 = 7800.694$ con 199 grados de libertad, es el error total (la distancia que existe entre cada venta y el promedio de ventas) 
+
+
+Para encontrar el coeficiente de determinación y la correlación basta con 
+
++ $R^2 = \frac{SSR}{SST} = 0.6118751$ el cual se puede interpretar como la proporción de la variabilidad que es explicada por el modelo de regresión, es decir, la relación entre ventas y youtube explica el 61.2% de la variación en los datos .
+
++ $r_{xy} = \sqrt{R^2} = 0.7822245$ el cual nos indica la fuerza y la dirección de la relación lineal entre ventas y youtube en el modelo que como podemos ver es positiva y muy cercana a 1, lo cual nos indicaría que es una buena estrategia anunciarnos en Youtube para vender.
+
+
+
+## Regresión múltiple
+
+En la sección anterior únicamente utilizamos los montos que se pagaron a Youtube para anunciar el producto o servicio de una empresa, esta vez añadiremos las dos variables restantes que involucran los costos por anunciar en Facebook o los periódicos, por lo que nuestro modelo ahora lucira como $sales = \beta_0 + \beta_1 Youtube + \beta_2 Facebook + \beta_3 Newspaper$, con
+
+
+```{r, include=FALSE}
+ 
+modelo2 <- lm(data = marketing, formula = sales ~ youtube + facebook + newspaper)
+summary(modelo2)
+
+```
+
+$\beta_0 = 3.526667$ \n
+$\beta_1 = 0.045765$ \n
+$\beta_2 = 0.188530$ \n
+$\beta_3 = -0.001037$ \n
+
+De lo cual podemos inferir que, en general, i) se gastan 3,526.667 en otras plataformas diferentes de Youtube, Facebook o el periódico, ii) de nuestras tres variables Facebook es el medio más redituable, en términos de ventas, en el que podemos anunciar el producto/servicio, y iii) por cada mil pesos extra que invertamos en el periódico perderemos 1.037 dólares.
+
+### Prueba t
+
+Sea la hipótesis nula $H_0: \beta_1 = 0$ vs. $H_1: \beta_1 \neq 0$.
+
+```{r, include=FALSE}
+t <- 32.809
+cuantil <- qt(0.975, nrow(marketing)-2)
+
+if (t < -cuantil | cuantil < t ){
+  cat("Se rechaza la hipótesis nula.\n")
+}
+
+```
+
+Se rechaza la hipótesis nula. \n
+
+
+Sea la hipótesis nula $H_0: \beta_2 = 0$ vs. $H_1: \beta_2 \neq 0$.
+
+```{r, include=FALSE}
+
+t <- 21.893
+cuantil <- qt(0.975, nrow(marketing)-2)
+
+if (t < -cuantil | cuantil < t ){
+  cat("Se rechaza la hipótesis nula.\n")
+}
+
+```
+Se rechaza la hipótesis nula. \n
+
+
+Sea la hipótesis nula $H_0: \beta_3 = 0$ vs. $H_1: \beta_3 \neq 0$.
+
+```{r, include=FALSE}
+
+t <- -0.177
+cuantil <- qt(0.975, nrow(marketing)-2)
+
+if (t < -cuantil | cuantil < t ){
+  cat("Se rechaza la hipótesis nula.\n")
+} else {
+  cat("Se acepta la hipótesis nula. \n")
+}
+
+```
+Se acepta la hipótesis nula. \n
+
+
+### Prueba F
+
+Sea la hipótesis nula $H_0: \mathbf{Y} = \beta0 + \epsilon$ vs. $H_1: \mathbf{Y} = \mathbf{X} \beta + \epsilon$.
+
+```{r, include=FALSE}
+
+qf(0.95, df1 = 3, df2 = 196) > 570.3
+
+```
+
+
+Al aplicar la prueba F sobre nuestro modelo obtenemos:
+El estadístico F 570.3 es mayor al cuantil $Q_{5\%}$ por lo que se rechaza la hipótesis nula, es decir, no se puede afirmar que las variables explicativas son independientes de la variable respuesta. 
+
+
+Podemos ver la diferencia entre las pruebas t y F, la prueba F nos indica que el modelo con $\beta_1$, $\beta_2$ y $\beta_3$ es mejor que un modelo en el que únicamente usemos a $\beta_0$, en cambio la prueba t nos dice $\beta_3$ debería ser $\beta_3 = 0$.
+
+
+### ANOVA ($R^2$ y $R_a^2$)
+
+Si revisamos el coeficiente de determinación $R^2 = 0.8972$ y el coeficiente de determinación ajustado $R_a^2 =  0.8956$, los cuales son prácticamente iguales y mayores al 80% lo cual es una buen indicador de que la relación ente las ventas y lo que se paga por publicidad en Youtube, Facebook y el periódico explican el $\approx 90\%$ de la variación en los datos.
+
+### Diagnóstico
+
+#### Linealidad
+
+Si graficamos las diferentes variables explicativas (Youtube, Facebook y Periódicos) vs. la variable respuesta (Ventas), podremos observar que con Youtube y Facebook se puede observar una relación lineal (sobre todo con Youtube), en cambio con Periódicos se nota una acomulación a la izquierda de la gráfica pero no una relación lineal significativa.
+
+```{r, echo=FALSE}
+
+ggplot(data = marketing) +
+  aes(x = youtube, y = sales) +
+  geom_point() +
+  theme_bw()
+
+```
+
+
+```{r, echo=FALSE}
+
+ggplot(data = marketing) +
+  aes(x = facebook, y = sales) +
+  geom_point() +
+  theme_bw()
+
+```
+
+
+```{r, echo=FALSE}
+
+ggplot(data = marketing) +
+  aes(x = newspaper, y = sales) +
+  geom_point() +
+  theme_bw()
+
+```
+
+Y la gráfica de sus residuales es
+
+```{r, echo=FALSE}
+
+ggplot(modelo2, aes(x = .fitted, y = .resid)) + 
+  geom_point() + 
+  geom_hline(yintercept = 0, linetype = 2) + 
+  xlab("Valores ajustados") + 
+  ylab("Residuales") + 
+  ggtitle("Residuales vs. valores ajustados") +
+  theme_bw()
+
+```
+
+En el que es posible notar un inicio de "corbata de moño", lo que nos podría indicar un problema de heteroesquedasticidad.
+
+Por lo que se propone el modelo $\text{Ventas} = -4.88623 + 1.06089 \sqrt{Youtube} + 1.72164 \sqrt{Facebook}$. 
+
+Si graficamos de nuevo las variables explicativas vs. ventas tenemos:
+
+```{r, echo=FALSE}
+
+ggplot(data = marketing) +
+  aes(x = sqrt(youtube), y = sales) +
+  geom_point() +
+  theme_bw()
+
+```
+
+
+```{r, echo=FALSE}
+
+ggplot(data = marketing) +
+  aes(x = sqrt(facebook), y = sales) +
+  geom_point() +
+  theme_bw()
+
+```
+
+Ahora se puede observar un cambio en las gráficas, la relación lineal es más notoría con este modelo.
+
+
+Si ahora graficamos los residuales: 
+
+```{r, echo=FALSE, warning=FALSE}
+
+modelo3 <- lm(sales ~ sqrt(youtube) + sqrt(facebook), data = marketing)
+
+ggplot(modelo3, aes(x = .fitted, y = .resid)) + 
+  geom_point() + 
+  geom_hline(yintercept = 0, linetype = 2) + 
+  xlab("Valores ajustados") + 
+  ylab("Residuales") + 
+  ggtitle("Residuales vs. valores ajustados") +
+  theme_bw()
+
+```
+
+En el que se nota un patrón de U.
+
+Los residuales cuadrados:
+
+```{r, echo=FALSE, warning=FALSE}
+
+ggplot(modelo3, aes(x = .fitted, y = .resid^2)) + 
+  geom_point() + 
+  geom_hline(yintercept = 0, linetype = 2) + 
+  xlab("Valores ajustados") + 
+  ylab("Residuales al cuadrado") + 
+  ggtitle("Residuales al cuadrado vs. valores ajustados") +
+  theme_bw()
+
+```
+
+Aunque ya no tan pronunciada, se puede continuar viendo una U, sobre todo por los extremos.
+
+Residuales y $\sqrt{\text{Youtube}}$
+
+
+```{r, echo=FALSE, warning=FALSE}
+
+ggplot(marketing, aes(x = sqrt(youtube), y = modelo3$residuals)) + 
+  geom_point() + 
+  geom_hline(yintercept = 0, linetype = 2) + 
+  xlab("sqrt(Youtube)") + 
+  ylab("Residuales") + 
+  ggtitle("Residuales vs. sqrt(Youtube)") +
+  theme_bw()
+
+```
+
+En esta gráfica se puede ver el amago de una U invertida.
+
+
+Residuales al cuadrado y $\sqrt{\text{Youtube}}$
+
+```{r, echo=FALSE, warning=FALSE}
+
+ggplot(marketing, aes(x = sqrt(youtube), y = modelo3$residuals^2)) + 
+  geom_point() + 
+  geom_hline(yintercept = 0, linetype = 2) + 
+  xlab("sqrt(Youtube)") + 
+  ylab("Residuales al cuadrado") + 
+  ggtitle("Residuales al cuadrado vs. sqrt(Youtube)") +
+  theme_bw()
+
+```
+
+Al elevar los residuales al cuadrado se elimina el patrón de U invertida.
+
+Residuales  y $\sqrt{\text{Facebook}}$
+
+```{r, echo=FALSE, warning=FALSE}
+
+ggplot(marketing, aes(x = sqrt(facebook), y = modelo3$residuals)) + 
+  geom_point() + 
+  geom_hline(yintercept = 0, linetype = 2) + 
+  xlab("sqrt(Facebook)") + 
+  ylab("Residuales") + 
+  ggtitle("Residuales vs. sqrt(Facebook)") +
+  theme_bw()
+
+```
+
+Residuales al cuadrado y $\sqrt{\text{Facebook}}$
+
+```{r, echo=FALSE, warning=FALSE}
+
+ggplot(marketing, aes(x = sqrt(facebook), y = modelo3$residuals^2)) + 
+  geom_point() + 
+  geom_hline(yintercept = 0, linetype = 2) + 
+  xlab("sqrt(Facebook)") + 
+  ylab("Residuales al cuadrado") + 
+  ggtitle("Residuales al cuadrado vs. sqrt(Facebook)") +
+  theme_bw()
+
+```
+
+#### Heteroesquedasticidad
+
+##### Prueba Brown-Forsythe
+
+Sea la hipótesis nula $H_0: \sigma^2$ vs. $H_1: \sigma_i^2$, $i=1,2,...,n$
+
+```{r, include=FALSE, warning=FALSE}
+
+res1 <- modelo3$residuals[which(sqrt(marketing$youtube) <= median(sqrt(marketing$youtube)))]
+res2 <- modelo3$residuals[which(sqrt(marketing$youtube) > median(sqrt(marketing$youtube)))]
+
+d_1 <- abs(res1 - median(res1))
+d_2 <- abs(res2 - median(res2))
+
+bard_1 <- mean(d_1)
+bard_2 <- mean(d_2)
+
+s <- sqrt(sum((d_1 - bard_1)^2) + sum((d_2 - bard_2)^2))/(198)
+
+t_bf <- (bard_1 - bard_2)/(s*sqrt(1/100 + 1/100))
+
+pt(q = abs(t_bf), df = 198, lower.tail = F)
+
+```
+
+La prueba Breusch-Pagan nos da un valor p de $3.085773e-57 < 0.05 = \alpha$ que es el nivel de significancia, lo que nos indica que la varianza es heterocedastica.
+
+
+##### Prueba de Breusch-Pagan
+
+```{r, include=FALSE, message=FALSE}
+
+library(lmtest)
+bptest(modelo3)
+
+```
+La prueba Breusch-Pagan nos da un valor p de $0.04004 < 0.05 = \alpha$ que es el nivel de significancia, lo que nos indica que la varianza es heterocedastica.
+
+
+##### Prueba Glejser
+
+```{r, include=FALSE, message=FALSE}
+
+#install.packages("skedastic")
+library(skedastic)
+glejser(mainlm = modelo3)
+
+```
+
+La prueba Glejser nos da un valor p de $0.04531325 < 0.05 = \alpha$ que es el nivel de significancia, lo que nos indica que la varianza es heterocedastica.
+
+#### Mínimos cuadrados ponderados
+
+Para solucionar el problema de heteroesquedasticidad se propone que los estimadores de los coeficientes ahora sean calculados como $\hat{\beta} = (X'WX)^{-1}X'WY$ con $w_{ii}=\frac{1}{\sigma_i^2}$ y se seguirá el modelo $\text{Sales} =  -6.98901 + 1.14980 \sqrt{\text{Youtube}} + 1.92352 \sqrt{\text{Facebook}}$.
+
+```{r, include=FALSE}
+
+pesos <- 1 / lm(abs(modelo3$residuals) ~ modelo3$fitted.values)$fitted.values^2
+
+modelo4 <- lm(sales ~ sqrt(marketing$youtube) + sqrt(marketing$facebook), data = marketing, weights = pesos)
+
+modelo4 |> summary()
+
+#o
+
+modelo_var <- lm(formula = modelo3$residuals^2 ~ sqrt(marketing$youtube) + sqrt(marketing$facebook))
+
+vector_pesos <- 1/modelo_var$fitted.values
+
+modelo_wls <- 
+  lm(data = marketing, formula = sales ~ sqrt(youtube) + sqrt(facebook), weights = vector_pesos)
+
+modelo_wls |> summary()
+
+```
+
+Si volvemos a aplicar las pruebas anteriores al modelo ajustado, tendremos que:
+
+
+En las tres pruebas los valores p son menores al nivel de significancia. 
+```{r, include=FALSE}
+
+res1 <- modelo_wls$residuals[which(sqrt(marketing$youtube) <= median(sqrt(marketing$youtube)))]
+res2 <- modelo_wls$residuals[which(sqrt(marketing$youtube) > median(sqrt(marketing$youtube)))]
+
+d_1 <- abs(res1 - median(res1))
+d_2 <- abs(res2 - median(res2))
+
+bard_1 <- mean(d_1)
+bard_2 <- mean(d_2)
+
+s <- sqrt(sum((d_1 - bard_1)^2) + sum((d_2 - bard_2)^2))/(197)
+
+t_bf <- (bard_1 - bard_2)/(s*sqrt(1/100 + 1/100))
+
+pt(q = abs(t_bf), df = 197, lower.tail = F)
+```
+
+```{r, include=FALSE}
+
+glejser(mainlm = modelo2)
+glejser(mainlm = modelo_wls)
+```
+
+```{r, include=FALSE}
+
+bptest(modelo_wls)
+
+```
+
+
+#### Normalidad
+
+```{r, echo=FALSE, warning=FALSE}
+
+ggplot(modelo_wls, aes(sample = .resid)) +
+  stat_qq() +
+  stat_qq_line() +
+  xlab("Teórico") +
+  ylab("Muestra") +
+  ggtitle("QQ plot de los residuales") + 
+  theme_bw()
+
+
+```
+En la gráfica se puede apreciar un ajuste bueno excepto en las colas, sobre todo en la derecha, no es recomendable guiarse únicamente por las gráficas, por ello se realizarán las siguientes pruebas.
+
+
+##### Prueba Kolmogorov-Smirnov
+
+Sea la hipótesis nula $H_0: \epsilon \sim N(\mu, \sigma^2)$ vs. $H_1: \epsilon \not\sim N(\mu, \sigma^2)$.
+
+```{r, include=FALSE}
+
+ks.test(resid(modelo_wls), "pnorm")
+
+
+
+```
+
+La prueba nos arroja un valor p de $2.036e-08 < 0.05 = \alpha = \text{ nivel de significancia}$ por lo que rechaza la hipótesis nula. 
+
+##### Prueba Shapiro-Wilks
+
+```{r, include=FALSE}
+
+shapiro.test(resid(modelo_wls))
+
+```
+
+La prueba nos dice que el valor p es $2.173e-062.554e-08 que se rechaza la hipótesis nula.
+
+Podemos ver que en ambas pruebas se rechazó que los residuales siguen una distribución normal.
+
+
+#### Multicolinealidad
+
+Al hacer la matriz de correlaciones podemos observar que Facebook y Periódico son las dos variables explicativas más correlacionadas $\rho_{FP} = 0.35$, sin embargo el modelo no considera a la variable Preiódico.
+
+```{r, echo=FALSE, warning=FALSE}
+
+library(corrplot)
+
+correlaciones <- cor(marketing)
+corrplot(correlaciones, method = "number")
+
+```
+
+Los factores de inflación de varianzas nos indican que no hay evidencia de multicolinealidad pues los factores de las dos variables es menor a diez.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+library(car)
+
+c <- vif(modelo4)
+
+fac_inf <- data.frame("Variables" = c("sqrt(Youtube)", "sqrt(Facebook)"), "Factores" = c(1.00259, 1.00259))
+
+kable(fac_inf)
+
+```
+
+
+## Conclusiones
+
+Se comenzó por hacer un hacer una regresión lineal simple en la que el modelo fue $\text{Sales} = 8.439112 + 0.04753664 \text{Youtube}$, lo que significa que por cada mil pesos extra que se gasten en Youtube por publicidad las ventas aumentarán aproximadamente un 0.5% y en general las ventas que se dan sin publicidad alguna son aproximadamente de 8.5 mil unidades.
+
+Luego se hizo una regresión múltiple en el que los coeficientes fueron $\text{Sales} = 3.526667 + 0.045765 \text{Youtube} + 0.188530 \text{Facebook} -0.001037 \text{Periódico}$, a partir de este modelo con el coeficiente de Periódicos se podría interpretar que por cada mil dólares que se aumenten al gasto de publicidad en Periódicos hay una disminución en las ventas por 0.1%.
+
+Una vez que se tiene el modelo que considera todas las variables que pueden afectar las ventas se hace un diagnóstico del modelo para verificarlo, modificarlo o descartarlo según se ajuste a los datos. 
+
+En las gráficas de los residuales vs Youtube y Facebook, al inicio, se puede apreciar una ligera curvatura que desaparece y se transforma en un patrón lineal, en cambio con Periódicos en ninguna parte de la gráfica se puede ver una relación lineal. En la gráfica de los residuales vs los valores ajustados se muestra una relación no lineal por lo que se decide proponer el modelo $\text{Ventas} = -4.88623 + 1.06089 \sqrt{\text{Youtube}} + 1.72164 \sqrt{\text{Facebook}}$, de esta manera las gráficas de los residuales vs Youtube y Facebook transformadas ahora muestran un comportamineto lineal, pero a gráfica de los residuales vs los valores ajustados cuantinúa siendo no lineal lo que nos puede alertar de una posible heteroesquerasticidad. 
+
+Para revisar si se cumple el supuesto de homocedasticidad están las pruebas Brown-Forsythe, Breusch-Pagan y Glejser, los resultados de las tres pruebas arrojan que no se cumple el supuesto. Para intentar solucionar esto se propone el modelo $\text{Sales} =  -6.98901 + 1.14980 \sqrt{\text{Youtube}} + 1.92352 \sqrt{\text{Facebook}}$ en el que se multiplica el modelo anterior por una matriz de pesos, sin embargo no es suficiente para que se pueda cumplir el supuesto de homocedasticidad.
+
+Con el mismo modelo se busca comprobar el supuesto de normalidad mediante Kolmogorov-Smirnov y Shapiro-Wilks aunque los resultados de ambas pruebas arrojan que no es así.
+
+Finalmente se revisa si las variables están correlacionadas entre sí, lo que se conoce como multicolinealidad, para esto se obtienen los factores de inflación de varianzas cuyos resultados nos dicen que las variables no están correlacionadas.
+
+Después del diagnóstico podemos decir que el modelo no cumple con todos los supuestos que debería. Si se usa o no dependerá de los objetivos que se deseen lograr.
+
+
+
+
+
+
+
+
+
